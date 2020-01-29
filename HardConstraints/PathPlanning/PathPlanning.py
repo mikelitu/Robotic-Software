@@ -180,17 +180,17 @@ class PathPlanningLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def isValidInputOutputData(self, inputVolumeNode, outputFiducialsNode):
+  def isValidInputOutputData(self, inputEntryFiducialsNode, outputFiducialsNode):
     """Validates if the output is not the same as input
     """
-    if not inputVolumeNode:
-      logging.debug('isValidInputOutputData failed: no input volume node defined')
+    if not inputEntryFiducialsNode:
+      logging.debug('isValidInputOutputData failed: no input fiducial node defined')
       return False
     if not outputFiducialsNode:
-      logging.debug('isValidInputOutputData failed: no output volume node defined')
+      logging.debug('isValidInputOutputData failed: no output fiducial node defined')
       return False
-    if inputVolumeNode.GetID()==outputFiducialsNode.GetID():
-      logging.debug('isValidInputOutputData failed: input and output volume is the same. Create a new volume for output to avoid this error.')
+    if inputEntryFiducialsNode.GetID()==outputFiducialsNode.GetID():
+      logging.debug('isValidInputOutputData failed: input and output fiducials are the same. Create new fiducials for output to avoid this error.')
       return False
     return True
 
@@ -205,8 +205,8 @@ class PathPlanningLogic(ScriptedLoadableModuleLogic):
 
     logging.info('Processing started')
 
-    # Compute the thresholded output volume using the Threshold Scalar Volume CLI module
-    pathPicker = PickPaths()
+    # Compute the path selection algorithm
+    pathPicker = PickPathsmat()
     pathPicker.run(inputVolume, entries, targets, outpaths)
 
     # Capture screenshot
@@ -218,23 +218,20 @@ class PathPlanningLogic(ScriptedLoadableModuleLogic):
     return True
 
 class Line():
-  def getPoints(self, point_a, point_b, scaling = 0.1):
+  def getPoints(self, point_a, point_b, scaling = 1.0):
     points = []
-    points.append(point_a)
-    diff = list(np.array(point_b) - np.array(point_a))
-    new_point = point_a
-    while new_point != point_b:
-      new_point = new_point + list(scaling * np.array(diff))
-      points.append(new_point)
+    diff = np.array(point_b) - np.array(point_a)
+    for i in range(0, int(1/scaling) + 1):
+      new_point = np.array(point_a) + (i * scaling * diff)
+      points.append(list(new_point))
     return points
 
 
-class PickPaths():
+class PickPathsPoints():
   def run(self, inputVolume, entries, targets, outpaths):
     #Given an input and a single point the algorithm will return the value
     #of the pixel at that certain position
     outpaths.RemoveAllMarkups()
-    out_points = []
     for y in range(0, entries.GetNumberOfFiducials()):
       entry = [0, 0, 0]
       entries.GetNthFiducialPosition(y, entry)
@@ -242,7 +239,7 @@ class PickPaths():
         target = [0, 0, 0]
         targets.GetNthFiducialPosition(x, target)
         myline = Line()
-        points = myline.getPoints(entry, target)
+        points = myline.getPoints(entry, target, scaling=1.0)
         for point in points:
           ind = inputVolume.GetImageData().FindPoint(point)
           dim = inputVolume.GetImageData().GetDimensions()
@@ -250,9 +247,32 @@ class PickPaths():
           yind = (ind % (dim[0] * dim[1])) / dim[0]
           zind = ind / (dim[0] * dim[1])
           pixelValue = inputVolume.GetImageData().GetScalarComponentAsDouble(xind, yind, zind, 0)
-          if pixelValue == 1 & point not in out_points:
+          if pixelValue == 1:
             outpaths.AddFiducial(point[0], point[1], point[2])
-            out_points.append(point)
+
+class PickPathsmat():
+  def run(self, inputVolume, entries, targets, outpaths):
+    #Improve method for the computation of the first task of the path planning assignment, in this case instead of using
+    #the points in the global world coordinate, the points are translated to the image coordinates and then the pixel value
+    #is computed using the same process as before.
+    outpaths.RemoveAllMarkups()
+    #Define the matrix with the information of the image axis orientation
+    ref = vtk.vtkMatrix4x4()
+    inputVolume.GetRASToIJKMatrix(ref)
+    #Set the matrix as a vtk transformation matrix
+    trans = vtk.vtkTransform()
+    trans.SetMatrix(ref)
+    for x in range(0, targets.GetNumberOfFiducials()):
+      target = [0, 0, 0]
+      targets.GetNthFiducialPosition(x, target)
+      #Transform the point
+      ind = trans.TransformPoint(target)
+      #Compute the value of the pixel at that point, remember that the indexes must be integers to index in the input volume
+      pixelValue = inputVolume.GetImageData().GetScalarComponentAsDouble(int(ind[0]), int(ind[1]), int(ind[2]), 0)
+      if pixelValue != 1:
+          outpaths.AddFiducial(target[0], target[1], target[2])
+
+
 
 class PathPlanningTest(ScriptedLoadableModuleTest):
   """
