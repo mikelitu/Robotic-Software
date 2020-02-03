@@ -201,6 +201,8 @@ class PathPlanning2Logic(ScriptedLoadableModuleLogic):
     # Run the class IntersectWith()
     intersect = IntersectWith()
     intersect.run(inputVolume, entries, targets)
+    danielsson = ComputeDistanceImageFromLabelMap()
+    danielsson.Execute(inputVolume)
 
     # Capture screenshot
     if enableScreenshots:
@@ -281,6 +283,13 @@ class IntersectWith():
 
     return trajectories
 
+class ComputeDistanceImageFromLabelMap():
+  def Execute(self, inputVolume):
+    sitkInput = su.PullVolumeFromSlicer(inputVolume)
+    distanceFilter = sitk.DanielssonDistanceMapImageFilter() # you can try other filters from here: https://itk.org/Doxygen/html/group__ITKDistanceMap.html
+    sitkOutput = distanceFilter.Execute(sitkInput)
+    outputVolume = su.PushVolumeToSlicer(sitkOutput, None, 'distanceMap')
+    return outputVolume
 
 class PathPlanning2Test(ScriptedLoadableModuleTest):
   """
