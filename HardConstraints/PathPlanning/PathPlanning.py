@@ -252,7 +252,7 @@ class PathPlanningTest(ScriptedLoadableModuleTest):
     self.test_LoadData('C:/Users/mikel/Desktop/Healthcare Technologies/Robotic-Software/Practicals/Lab2and3')
     self.test_PathPlanning_OutFiducial()
     self.test_PathPlanning_InFiducial()
-    self.test_PathPlanning_TestNullSpace()
+    self.test_PathPlanning_TestEmptyMask()
     self.test_PathPlanning_TestNoPoints()
     self.setUp() #clear all the data after testing
 
@@ -328,9 +328,9 @@ class PathPlanningTest(ScriptedLoadableModuleTest):
 
     self.delayDisplay('Test passed! ' + str(Output.GetNumberOfFiducials()) + ' points were returned')
 
-  def test_PathPlanning_TestNullSpace(self):
+  def test_PathPlanning_TestEmptyMask(self):
     """Test the case for the empty mask where there is no target mask"""
-    self.delayDisplay('Starting test points for the null space')
+    self.delayDisplay('Starting test points for empty mask')
     emptymask = slicer.vtkMRMLLabelMapVolumeNode()
     emptymask.SetAndObserveImageData(vtk.vtkImageData())
 
