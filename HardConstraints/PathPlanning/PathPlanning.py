@@ -70,20 +70,6 @@ class PathPlanningWidget(ScriptedLoadableModuleWidget):
     self.inputImageSelector.setToolTip( "Pick the input to the algorithm." )
     parametersFormLayout.addRow("Input Label Map: ", self.inputImageSelector)
 
-    #
-    #input entry points
-    #
-    self.inputEntrySelector = slicer.qMRMLNodeComboBox()
-    self.inputEntrySelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
-    self.inputEntrySelector.selectNodeUponCreation = True
-    self.inputEntrySelector.addEnabled = False
-    self.inputEntrySelector.removeEnabled = False
-    self.inputEntrySelector.noneEnabled = False
-    self.inputEntrySelector.showHidden = False
-    self.inputEntrySelector.showChildNodeTypes = False
-    self.inputEntrySelector.setMRMLScene(slicer.mrmlScene)
-    self.inputEntrySelector.setToolTip("Pick the input entry fiducials to the algorithm.")
-    parametersFormLayout.addRow("Input entry points: ", self.inputEntrySelector)
 
     #
     #input target points
@@ -101,7 +87,7 @@ class PathPlanningWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow("Input target points: ", self.inputTargetSelector)
 
     #
-    # output paths
+    # output target points
     #
     self.outputSelector = slicer.qMRMLNodeComboBox()
     self.outputSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
@@ -151,7 +137,7 @@ class PathPlanningWidget(ScriptedLoadableModuleWidget):
   def onApplyButton(self):
     logic = PathPlanningLogic()
     enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
-    logic.run(self.inputImageSelector.currentNode(), self.inputEntrySelector.currentNode(), self.inputTargetSelector.currentNode(), self.outputSelector.currentNode(), enableScreenshotsFlag)
+    logic.run(self.inputImageSelector.currentNode(), self.inputTargetSelector.currentNode(), self.outputSelector.currentNode(), enableScreenshotsFlag)
 
 #
 # PathPlanningLogic
@@ -180,34 +166,39 @@ class PathPlanningLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def isValidInputOutputData(self, inputEntryFiducialsNode, outputFiducialsNode):
+  def isValidInputOutputData(self, inputImageNode, inputTargetFiducialsNode, outputFiducialsNode):
     """Validates if the output is not the same as input
     """
-    if not inputEntryFiducialsNode:
+    if not inputImageNode:
+      logging.debug('isValidInputOutputData failed: no input volume node defined')
+      return False
+    if not inputTargetFiducialsNode:
       logging.debug('isValidInputOutputData failed: no input fiducial node defined')
       return False
     if not outputFiducialsNode:
       logging.debug('isValidInputOutputData failed: no output fiducial node defined')
       return False
-    if inputEntryFiducialsNode.GetID()==outputFiducialsNode.GetID():
+    if inputTargetFiducialsNode.GetID()==outputFiducialsNode.GetID():
       logging.debug('isValidInputOutputData failed: input and output fiducials are the same. Create new fiducials for output to avoid this error.')
       return False
     return True
 
-  def run(self, inputVolume, entries, targets, outpaths, enableScreenshots=0):
+  def run(self, inputVolume, targets, outtargets, enableScreenshots=0):
     """
     Run the actual algorithm
     """
 
-    if not self.isValidInputOutputData(inputVolume, outpaths):
+    if not self.isValidInputOutputData(inputVolume, targets, outtargets):
       slicer.util.errorDisplay('Input volume is the same as output volume. Choose a different output volume.')
+      return False
+    if not self.hasImageData(inputVolume):
       return False
 
     logging.info('Processing started')
 
     # Compute the path selection algorithm
     pathPicker = PickPathsmat()
-    pathPicker.run(inputVolume, entries, targets, outpaths)
+    pathPicker.run(inputVolume, targets, outtargets)
 
     # Capture screenshot
     if enableScreenshots:
@@ -219,11 +210,11 @@ class PathPlanningLogic(ScriptedLoadableModuleLogic):
 
 
 class PickPathsmat():
-  def run(self, inputVolume, entries, targets, outpaths):
+  def run(self, inputVolume, targets, outtargets):
     #Improve method for the computation of the first task of the path planning assignment, in this case instead of using
     #the points in the global world coordinate, the points are translated to the image coordinates and then the pixel value
     #is computed using the same process as before.
-    outpaths.RemoveAllMarkups()
+    outtargets.RemoveAllMarkups()
     #Define the matrix with the information of the image axis orientation
     ref = vtk.vtkMatrix4x4()
     inputVolume.GetRASToIJKMatrix(ref)
@@ -238,7 +229,7 @@ class PickPathsmat():
       #Compute the value of the pixel at that point, remember that the indexes must be integers to index in the input volume
       pixelValue = inputVolume.GetImageData().GetScalarComponentAsDouble(int(ind[0]), int(ind[1]), int(ind[2]), 0)
       if pixelValue == 1:
-          outpaths.AddFiducial(target[0], target[1], target[2])
+          outtargets.AddFiducial(target[0], target[1], target[2])
 
 
 
@@ -258,9 +249,14 @@ class PathPlanningTest(ScriptedLoadableModuleTest):
     """Run as few or as many tests as needed here.
     """
     self.setUp()
-    self.test_PathPlanning1()
+    self.test_LoadData('C:/Users/mikel/Desktop/Healthcare Technologies/Robotic-Software/Practicals/Lab2and3')
+    self.test_PathPlanning_OutFiducial()
+    self.test_PathPlanning_InFiducial()
+    self.test_PathPlanning_TestNullSpace()
+    self.test_PathPlanning_TestNoPoints()
+    self.setUp() #clear all the data after testing
 
-  def test_PathPlanning1(self):
+  def test_LoadData(self, path):
     """ Ideally you should have several levels of tests.  At the lowest level
     tests should exercise the functionality of the logic with different inputs
     (both valid and invalid).  At higher levels your tests should emulate the
@@ -272,18 +268,89 @@ class PathPlanningTest(ScriptedLoadableModuleTest):
     your test should break so they know that the feature is needed.
     """
 
-    self.delayDisplay("Starting the test")
-    #
-    # first, get some data
-    #
-    import SampleData
-    SampleData.downloadFromURL(
-      nodeNames='FA',
-      fileNames='FA.nrrd',
-      uris='http://slicer.kitware.com/midas3/download?items=5767')
-    self.delayDisplay('Finished with download and loading')
+    self.delayDisplay("Starting the load data test")
+    #Load some data for the rest of the tests to work. This test checks that the
+    #desire data files are at the expected directory
 
-    volumeNode = slicer.util.getNode(pattern="FA")
-    logic = PathPlanningLogic()
-    self.assertIsNotNone( logic.hasImageData(volumeNode) )
-    self.delayDisplay('Test passed!')
+    isLoaded = slicer.util.loadLabelVolume(path + '/BrainParcellation/r_hippo.nii.gz')
+    if not isLoaded:
+      self.delayDisplay('Unable to load ' + path + '/BrainParcellation/r_hippo.nii.gz')
+
+    isLoaded = slicer.util.loadMarkupsFiducialList(path + '/targets.fcsv')
+    if not isLoaded:
+      self.delayDisplay('Unable to load ' + path + '/targets.fcsv')
+
+    self.delayDisplay('Test passed! All data loaded correctly')
+
+  def test_PathPlanning_OutFiducial(self):
+    #Check that the algorithm doesn't save a fiducial that's out of the target
+    self.delayDisplay('Starting test point is outside target.')
+
+    #get image node
+    hippo = slicer.util.getNode('r_hippo')
+
+    #Code two point that is outside the target structure
+    PointOut = slicer.vtkMRMLMarkupsFiducialNode()
+    PointOut.AddFiducial(228, 94, 110) #This point was obtained by inspection
+    PointOut.AddFiducial(0, 0, 0) #Point obtained by inspection
+
+    #run the class PickPathsmat
+    Output = slicer.vtkMRMLMarkupsFiducialNode()
+    PickPathsmat().run(hippo, PointOut, Output)
+
+    #check if it has returned any fiducial -- it has to be empty
+    if Output.GetNumberOfFiducials() > 0:
+      self.delayDisplay('Test failed. There are ' + str(Output.GetNumberOfFiducials()))
+      return
+
+    self.delayDisplay('Test passed! No points were returned')
+
+  def test_PathPlanning_InFiducial(self):
+    #Check that the algorithm doesn't save a fiducial that's out of the target
+    self.delayDisplay('Starting test point is inside target.')
+
+    #get image node
+    hippo = slicer.util.getNode('r_hippo')
+
+    #Code two points that is inside the target structure
+    PointIn = slicer.vtkMRMLMarkupsFiducialNode()
+    PointIn.AddFiducial(156, 122, 110) #This point was obtained by inspection
+    PointIn.AddFiducial(153.6, 126.1, 103) #This point was obtained by inspection
+
+    #run the class PickPathsmat
+    Output = slicer.vtkMRMLMarkupsFiducialNode()
+    PickPathsmat().run(hippo, PointIn, Output)
+
+    #check if it has returned any fiducial -- it has to be empty
+    if Output.GetNumberOfFiducials() != 2:
+      self.delayDisplay('Test failed. There are ' + str(Output.GetNumberOfFiducials()))
+      return
+
+    self.delayDisplay('Test passed! ' + str(Output.GetNumberOfFiducials()) + ' points were returned')
+
+  def test_PathPlanning_TestNullSpace(self):
+    """Test the case for the empty mask where there is no target mask"""
+    self.delayDisplay('Starting test points for the null space')
+    emptymask = slicer.vtkMRMLLabelMapVolumeNode()
+    emptymask.SetAndObserveImageData(vtk.vtkImageData())
+
+    targets = slicer.util.getNode('targets')
+
+    #run the class PickPathsmat()
+    Output = slicer.vtkMRMLMarkupsFiducialNode()
+    PickPathsmat().run(emptymask, targets, Output)
+    self.delayDisplay("Test passed! Empty mask doesn't break the class PickPathsmat()")
+
+  def test_PathPlanning_TestNoPoints(self):
+    """Test the case for the null space where there is no target mask"""
+    self.delayDisplay('Starting test no points for the hippocampus mask')
+    hippo = slicer.util.getNode('r_hippo')
+
+    #Empty markup fiducials set
+    emptypoints = slicer.vtkMRMLMarkupsFiducialNode()
+
+    #run the class PickPathsmat()
+    Output = slicer.vtkMRMLMarkupsFiducialNode()
+    PickPathsmat().run(hippo, emptypoints, Output)
+    self.delayDisplay("Test passed! Empty markup fiducials don't break the class PickPathsmat()")
+
