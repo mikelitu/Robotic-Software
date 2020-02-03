@@ -206,7 +206,7 @@ class PathPlanningLogic(ScriptedLoadableModuleLogic):
     logging.info('Processing started')
 
     # Compute the path selection algorithm
-    pathPicker = PickPathsPoints()
+    pathPicker = PickPathsmat()
     pathPicker.run(inputVolume, entries, targets, outpaths)
 
     # Capture screenshot
@@ -217,36 +217,6 @@ class PathPlanningLogic(ScriptedLoadableModuleLogic):
 
     return True
 
-class Line():
-  def getPoints(self, point_a, point_b, scaling = 1.0):
-    points = []
-    diff = np.array(point_b) - np.array(point_a)
-    for i in range(0, int(1/scaling) + 1):
-      new_point = np.array(point_a) + (i * scaling * diff)
-      points.append(list(new_point))
-    return points
-
-
-class PickPathsPoints():
-  def run(self, inputVolume, entries, targets, outpaths):
-    #Given an input and a single point the algorithm will return the value
-    #of the pixel at that certain position
-    outpaths.RemoveAllMarkups()
-    entry = [0, 0, 0]
-    entries.GetNthFiducialPosition(0, entry)
-    target = [0, 0, 0]
-    targets.GetNthFiducialPosition(0, target)
-    myline = Line()
-    points = myline.getPoints(entry, target, scaling=.1)
-    for point in points:
-      ind = inputVolume.GetImageData().FindPoint(point)
-      dim = inputVolume.GetImageData().GetDimensions()
-      xind = ind % dim[0]
-      yind = (ind % (dim[0] * dim[1])) / dim[0]
-      zind = ind / (dim[0] * dim[1])
-      pixelValue = inputVolume.GetImageData().GetScalarComponentAsDouble(xind, yind, zind, 0)
-      if pixelValue == 1:
-        outpaths.AddFiducial(point[0], point[1], point[2])
 
 class PickPathsmat():
   def run(self, inputVolume, entries, targets, outpaths):

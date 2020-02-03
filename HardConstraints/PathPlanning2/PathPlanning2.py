@@ -221,15 +221,6 @@ class IntersectWith():
     mesh = mc.run(inputVolume)
     obb = OBBTree()
     obbtree = obb.build(mesh)
-    # Improve method for the computation of the first task of the path planning assignment, in this case instead of using
-    # the points in the global world coordinate, the points are translated to the image coordinates and then the pixel value
-    # is computed using the same process as before.
-    # Define the matrix with the information of the image axis orientation
-    ref = vtk.vtkMatrix4x4()
-    inputVolume.GetRASToIJKMatrix(ref)
-    # Set the matrix as a vtk transformation matrix
-    trans = vtk.vtkTransform()
-    trans.SetMatrix(ref)
     for i in range(0, entries.GetNumberOfFiducials()):
       entry = [0, 0, 0]
       entries.GetNthFiducialPosition(i, entry)
@@ -243,11 +234,14 @@ class IntersectWith():
           line = vtk.vtkLine()
           line.GetPointIds().SetId(0, entryId)
           line.GetPointIds().SetId(1, targetId)
-          lines.InsertNextCell(line)
+          length = np.sqrt((target[0]-entry[0])**2 + (target[1]-entry[1])**2 + (target[2]-entry[2])**2)
+          if length < 55.0:
+            lines.InsertNextCell(line)
     trajectories.SetPoints(points)
     trajectories.SetLines(lines)
     pathNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'Trajectories')
     pathNode.SetAndObserveMesh(trajectories)
+
 
 class PathPlanning2Test(ScriptedLoadableModuleTest):
   """
@@ -279,18 +273,41 @@ class PathPlanning2Test(ScriptedLoadableModuleTest):
     your test should break so they know that the feature is needed.
     """
 
-    self.delayDisplay("Starting the test")
-    #
-    # first, get some data
-    #
-    import SampleData
-    SampleData.downloadFromURL(
-      nodeNames='FA',
-      fileNames='FA.nrrd',
-      uris='http://slicer.kitware.com/midas3/download?items=5767')
-    self.delayDisplay('Finished with download and loading')
+    def setUp(self):
+      slicer.mrmlScene.Clear(0)
 
-    volumeNode = slicer.util.getNode(pattern="FA")
-    logic = PathPlanning2Logic()
-    self.assertIsNotNone( logic.hasImageData(volumeNode) )
-    self.delayDisplay('Test passed!')
+    def runTest(self):
+      self.setUp()
+      self.test_LoadData('C:/Users/mikel/Desktop/Healthcare Technologies/Robotic-Software/Practicals/Lab2and3/TestSet')
+      self.test_PathPlanning2_NoInterLines()
+      #self.test_PathPlanning2_InterLines()
+      self.setUp()
+
+    def test_LoadData(self, path):
+      self.delayDisplay('Starting load data test')
+      isLoaded = slicer.util.loadLabelVolume(path + 'ventriclesTest.nii.gz')
+      if not isLoaded:
+        self.delayDisplay('Unable to load' + path + 'ventriclesTest.nii.gz')
+
+      self.delayDisplay('Test passed! All data loaded correctly')
+
+    def test_PathPlanning2_NoInterLines():
+
+      self.delayDisplay('Starting test no intersecting lines')
+
+      mask = slicer.util.getNode('ventriclesTest')
+
+      p1 = slicer.vtkMRMLMarkupsFiducialNode()
+      p1.AddFiducial(51, 28, 26)
+
+      p2 = slicer.vtkMRMLMarkupsFiducialNode()
+      p2.AddFiducial(53, 17, 28)
+
+      trajectories = IntersectWith().run(mask, p1, p2)
+
+      if trajectories.GetLines().GetSize() == 0:
+        self.delayDisplay('Test failed. There is no line')
+        return
+
+      self.delayDisplay('Test passed! A line was returned.')
+
