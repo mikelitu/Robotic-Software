@@ -221,15 +221,6 @@ class IntersectWith():
     mesh = mc.run(inputVolume)
     obb = OBBTree()
     obbtree = obb.build(mesh)
-    # Improve method for the computation of the first task of the path planning assignment, in this case instead of using
-    # the points in the global world coordinate, the points are translated to the image coordinates and then the pixel value
-    # is computed using the same process as before.
-    # Define the matrix with the information of the image axis orientation
-    ref = vtk.vtkMatrix4x4()
-    inputVolume.GetRASToIJKMatrix(ref)
-    # Set the matrix as a vtk transformation matrix
-    trans = vtk.vtkTransform()
-    trans.SetMatrix(ref)
     for i in range(0, entries.GetNumberOfFiducials()):
       entry = [0, 0, 0]
       entries.GetNthFiducialPosition(i, entry)
@@ -243,13 +234,14 @@ class IntersectWith():
           line = vtk.vtkLine()
           line.GetPointIds().SetId(0, entryId)
           line.GetPointIds().SetId(1, targetId)
-          lines.InsertNextCell(line)
+          length = np.sqrt((target[0]-entry[0])**2 + (target[1]-entry[1])**2 + (target[2]-entry[2])**2)
+          if length < 55.0:
+            lines.InsertNextCell(line)
     trajectories.SetPoints(points)
     trajectories.SetLines(lines)
     pathNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'Trajectories')
     pathNode.SetAndObserveMesh(trajectories)
 
-    return trajectories
 
 class PathPlanning2Test(ScriptedLoadableModuleTest):
   """
