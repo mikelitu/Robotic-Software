@@ -20,6 +20,8 @@ include(${Slicer_USE_FILE})
 #-----------------------------------------------------------------------------
 # Extension modules
 add_subdirectory(PathPlanning)
+add_subdirectory(Task2)
+add_subdirectory(PathPlanning2)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------

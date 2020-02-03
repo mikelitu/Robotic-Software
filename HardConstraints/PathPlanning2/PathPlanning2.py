@@ -3,24 +3,25 @@ import unittest
 import numpy as np
 import vtk, qt, ctk, slicer, random
 import SimpleITK as sitk
+import slicer.util as su
 from slicer.ScriptedLoadableModule import *
 import logging
 
 #
-# PathPlanning
+# PathPlanning2
 #
 
-class PathPlanning(ScriptedLoadableModule):
+class PathPlanning2(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "PathPlanning" # TODO make this more human readable by adding spaces
+    self.parent.title = "PathPlanning2" # TODO make this more human readable by adding spaces
     self.parent.categories = ["Examples"]
     self.parent.dependencies = []
-    self.parent.contributors = ["Mikel De Iturrate (King's College London)"] # replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["John Doe (AnyWare Corp.)"] # replace with "Firstname Lastname (Organization)"
     self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
 It performs a simple thresholding on the input volume and optionally captures a screenshot.
@@ -32,10 +33,10 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
 """ # replace with organization, grant and thanks.
 
 #
-# PathPlanningWidget
+# PathPlanning2Widget
 #
 
-class PathPlanningWidget(ScriptedLoadableModuleWidget):
+class PathPlanning2Widget(ScriptedLoadableModuleWidget):
   """Uses ScriptedLoadableModuleWidget base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
@@ -66,12 +67,12 @@ class PathPlanningWidget(ScriptedLoadableModuleWidget):
     self.inputImageSelector.noneEnabled = False
     self.inputImageSelector.showHidden = False
     self.inputImageSelector.showChildNodeTypes = False
-    self.inputImageSelector.setMRMLScene( slicer.mrmlScene )
-    self.inputImageSelector.setToolTip( "Pick the input to the algorithm." )
+    self.inputImageSelector.setMRMLScene(slicer.mrmlScene)
+    self.inputImageSelector.setToolTip("Pick the input to the algorithm.")
     parametersFormLayout.addRow("Input Label Map: ", self.inputImageSelector)
 
     #
-    #input entry points
+    # input entry points
     #
     self.inputEntrySelector = slicer.qMRMLNodeComboBox()
     self.inputEntrySelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
@@ -86,7 +87,7 @@ class PathPlanningWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow("Input entry points: ", self.inputEntrySelector)
 
     #
-    #input target points
+    # input target points
     #
     self.inputTargetSelector = slicer.qMRMLNodeComboBox()
     self.inputTargetSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
@@ -101,26 +102,12 @@ class PathPlanningWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow("Input target points: ", self.inputTargetSelector)
 
     #
-    # output paths
-    #
-    self.outputSelector = slicer.qMRMLNodeComboBox()
-    self.outputSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
-    self.outputSelector.selectNodeUponCreation = True
-    self.outputSelector.addEnabled = True
-    self.outputSelector.removeEnabled = True
-    self.outputSelector.noneEnabled = True
-    self.outputSelector.showHidden = False
-    self.outputSelector.showChildNodeTypes = False
-    self.outputSelector.setMRMLScene( slicer.mrmlScene )
-    self.outputSelector.setToolTip( "Pick the output fiducials to the algorithm." )
-    parametersFormLayout.addRow("Output Paths: ", self.outputSelector)
-
-    #
     # check box to trigger taking screen shots for later use in tutorials
     #
     self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
     self.enableScreenshotsFlagCheckBox.checked = 0
-    self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
+    self.enableScreenshotsFlagCheckBox.setToolTip(
+      "If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
     parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
 
     #
@@ -134,7 +121,6 @@ class PathPlanningWidget(ScriptedLoadableModuleWidget):
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
     self.inputImageSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
 
     # Add vertical spacer
     self.layout.addStretch(1)
@@ -146,18 +132,20 @@ class PathPlanningWidget(ScriptedLoadableModuleWidget):
     pass
 
   def onSelect(self):
-    self.applyButton.enabled = self.inputImageSelector.currentNode() and self.outputSelector.currentNode()
+    self.applyButton.enabled = self.inputImageSelector.currentNode()
 
   def onApplyButton(self):
-    logic = PathPlanningLogic()
+    logic = PathPlanning2Logic()
     enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
-    logic.run(self.inputImageSelector.currentNode(), self.inputEntrySelector.currentNode(), self.inputTargetSelector.currentNode(), self.outputSelector.currentNode(), enableScreenshotsFlag)
+    logic.run(self.inputImageSelector.currentNode(), self.inputEntrySelector.currentNode(),
+              self.inputTargetSelector.currentNode(), enableScreenshotsFlag)
+
 
 #
-# PathPlanningLogic
+# PathPlanning2Logic
 #
 
-class PathPlanningLogic(ScriptedLoadableModuleLogic):
+class PathPlanning2Logic(ScriptedLoadableModuleLogic):
   """This class should implement all the actual
   computation done by your module.  The interface
   should be such that other python code can import
@@ -180,99 +168,88 @@ class PathPlanningLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def isValidInputOutputData(self, inputEntryFiducialsNode, outputFiducialsNode):
+  def isValidInputOutputData(self, inputVolumeNode):
     """Validates if the output is not the same as input
     """
-    if not inputEntryFiducialsNode:
-      logging.debug('isValidInputOutputData failed: no input fiducial node defined')
-      return False
-    if not outputFiducialsNode:
-      logging.debug('isValidInputOutputData failed: no output fiducial node defined')
-      return False
-    if inputEntryFiducialsNode.GetID()==outputFiducialsNode.GetID():
-      logging.debug('isValidInputOutputData failed: input and output fiducials are the same. Create new fiducials for output to avoid this error.')
+    if not inputVolumeNode:
+      logging.debug('isValidInputOutputData failed: no input volume node defined')
       return False
     return True
 
-  def run(self, inputVolume, entries, targets, outpaths, enableScreenshots=0):
+  def run(self, inputVolume, entries, targets, enableScreenshots=0):
     """
     Run the actual algorithm
     """
 
-    if not self.isValidInputOutputData(inputVolume, outpaths):
-      slicer.util.errorDisplay('Input volume is the same as output volume. Choose a different output volume.')
-      return False
-
     logging.info('Processing started')
 
-    # Compute the path selection algorithm
-    pathPicker = PickPathsPoints()
-    pathPicker.run(inputVolume, entries, targets, outpaths)
+    # Compute the thresholded output volume using the Threshold Scalar Volume CLI module
+    intersect = IntersectWith()
+    intersect.run(inputVolume, entries, targets)
 
     # Capture screenshot
     if enableScreenshots:
-      self.takeScreenshot('PathPlanningTest-Start','MyScreenshot',-1)
+      self.takeScreenshot('PathPlanning2Test-Start','MyScreenshot',-1)
 
     logging.info('Processing completed')
 
     return True
 
-class Line():
-  def getPoints(self, point_a, point_b, scaling = 1.0):
-    points = []
-    diff = np.array(point_b) - np.array(point_a)
-    for i in range(0, int(1/scaling) + 1):
-      new_point = np.array(point_a) + (i * scaling * diff)
-      points.append(list(new_point))
-    return points
+class MarchingCubes():
+  def run(self, inputImage):
+    mc = vtk.vtkMarchingCubes()
+    mc.SetInputData(inputImage.GetImageData())
+    mc.ComputeGradientsOn()
+    mc.SetValue(0,1)
+    mc.Update()
+    return mc.GetOutput()
 
+class OBBTree():
+  def build(self, mesh):
+    obb = vtk.vtkOBBTree()
+    obb.SetDataSet(mesh)
+    obb.BuildLocator()
+    obb.Update()
+    return obb
 
-class PickPathsPoints():
-  def run(self, inputVolume, entries, targets, outpaths):
-    #Given an input and a single point the algorithm will return the value
-    #of the pixel at that certain position
-    outpaths.RemoveAllMarkups()
-    entry = [0, 0, 0]
-    entries.GetNthFiducialPosition(0, entry)
-    target = [0, 0, 0]
-    targets.GetNthFiducialPosition(0, target)
-    myline = Line()
-    points = myline.getPoints(entry, target, scaling=.1)
-    for point in points:
-      ind = inputVolume.GetImageData().FindPoint(point)
-      dim = inputVolume.GetImageData().GetDimensions()
-      xind = ind % dim[0]
-      yind = (ind % (dim[0] * dim[1])) / dim[0]
-      zind = ind / (dim[0] * dim[1])
-      pixelValue = inputVolume.GetImageData().GetScalarComponentAsDouble(xind, yind, zind, 0)
-      if pixelValue == 1:
-        outpaths.AddFiducial(point[0], point[1], point[2])
-
-class PickPathsmat():
-  def run(self, inputVolume, entries, targets, outpaths):
-    #Improve method for the computation of the first task of the path planning assignment, in this case instead of using
-    #the points in the global world coordinate, the points are translated to the image coordinates and then the pixel value
-    #is computed using the same process as before.
-    outpaths.RemoveAllMarkups()
-    #Define the matrix with the information of the image axis orientation
+class IntersectWith():
+  def run(self, inputVolume, entries, targets):
+    lines = vtk.vtkCellArray()
+    trajectories = vtk.vtkPolyData()
+    points = vtk.vtkPoints()
+    mc = MarchingCubes()
+    mesh = mc.run(inputVolume)
+    obb = OBBTree()
+    obbtree = obb.build(mesh)
+    # Improve method for the computation of the first task of the path planning assignment, in this case instead of using
+    # the points in the global world coordinate, the points are translated to the image coordinates and then the pixel value
+    # is computed using the same process as before.
+    # Define the matrix with the information of the image axis orientation
     ref = vtk.vtkMatrix4x4()
     inputVolume.GetRASToIJKMatrix(ref)
-    #Set the matrix as a vtk transformation matrix
+    # Set the matrix as a vtk transformation matrix
     trans = vtk.vtkTransform()
     trans.SetMatrix(ref)
-    for x in range(0, targets.GetNumberOfFiducials()):
-      target = [0, 0, 0]
-      targets.GetNthFiducialPosition(x, target)
-      #Transform the point
-      ind = trans.TransformPoint(target)
-      #Compute the value of the pixel at that point, remember that the indexes must be integers to index in the input volume
-      pixelValue = inputVolume.GetImageData().GetScalarComponentAsDouble(int(ind[0]), int(ind[1]), int(ind[2]), 0)
-      if pixelValue == 1:
-          outpaths.AddFiducial(target[0], target[1], target[2])
+    for i in range(0, entries.GetNumberOfFiducials()):
+      entry = [0, 0, 0]
+      entries.GetNthFiducialPosition(i, entry)
+      for j in range(0, targets.GetNumberOfFiducials()):
+        target = [0, 0, 0]
+        targets.GetNthFiducialPosition(j, target)
+        intersect = obbtree.IntersectWithLine(entry, target, vtk.vtkPoints(), None)
+        if intersect==0:
+          entryId = points.InsertNextPoint(entry[0], entry[1], entry[2])
+          targetId = points.InsertNextPoint(target[0], target[1], target[2])
+          line = vtk.vtkLine()
+          line.GetPointIds().SetId(0, entryId)
+          line.GetPointIds().SetId(1, targetId)
+          lines.InsertNextCell(line)
+    trajectories.SetPoints(points)
+    trajectories.SetLines(lines)
+    pathNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'Trajectories')
+    pathNode.SetAndObserveMesh(trajectories)
 
-
-
-class PathPlanningTest(ScriptedLoadableModuleTest):
+class PathPlanning2Test(ScriptedLoadableModuleTest):
   """
   This is the test case for your scripted module.
   Uses ScriptedLoadableModuleTest base class, available at:
@@ -288,9 +265,9 @@ class PathPlanningTest(ScriptedLoadableModuleTest):
     """Run as few or as many tests as needed here.
     """
     self.setUp()
-    self.test_PathPlanning1()
+    self.test_PathPlanning21()
 
-  def test_PathPlanning1(self):
+  def test_PathPlanning21(self):
     """ Ideally you should have several levels of tests.  At the lowest level
     tests should exercise the functionality of the logic with different inputs
     (both valid and invalid).  At higher levels your tests should emulate the
@@ -314,6 +291,6 @@ class PathPlanningTest(ScriptedLoadableModuleTest):
     self.delayDisplay('Finished with download and loading')
 
     volumeNode = slicer.util.getNode(pattern="FA")
-    logic = PathPlanningLogic()
+    logic = PathPlanning2Logic()
     self.assertIsNotNone( logic.hasImageData(volumeNode) )
     self.delayDisplay('Test passed!')
