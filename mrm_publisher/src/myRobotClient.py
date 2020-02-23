@@ -9,7 +9,7 @@ from mrm_publisher.msg import instructionsMessage, responseMessage
 class myRobotClient:
 
     def __init__(self):
-        rospy.init_node('robotModelClient', anonymous=True)
+        rospy.init_node('myRobotClient', anonymous=True)
         self.pub = rospy.Publisher('chatter', instructionsMessage, queue_size=1)
         self.msg = instructionsMessage()
 
