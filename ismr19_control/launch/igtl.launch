@@ -1,0 +1,11 @@
+<launch>
+   <param name="RIB_port" value="18944" type="int"/>
+   <param name="RIB_type" value="server" type="str"/>
+   <node pkg="ros_igtl_bridge" type="ros_igtl_bridge_node" name="ros_igtl_bridge_node" output="screen" />
+   <node pkg="ismr19_control" type="igtl_exporter.py" name="igtl_exporter" output="screen" />	
+   <!--node pkg="ismr19_control" type="ismr19_control_node" name="ismr19_control_node" output="screen" /-->
+
+</launch>
+
+
+
